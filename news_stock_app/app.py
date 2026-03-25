@@ -5,6 +5,7 @@ FastAPI backend
 
 import asyncio
 import os
+from pathlib import Path
 from typing import List, Optional
 
 from dotenv import load_dotenv
@@ -40,10 +41,11 @@ _cache: dict = {
 # Routes
 # ─────────────────────────────────────────────
 
+TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    template_path = os.path.join(os.path.dirname(__file__), "templates", "index.html")
-    with open(template_path) as f:
+    with open(TEMPLATES_DIR / "index.html") as f:
         return f.read()
 
 
