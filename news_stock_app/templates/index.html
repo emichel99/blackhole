@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>News → Stock Impact Analyzer</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #21262d;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --red: #f85149;
+      --yellow: #d29922;
+      --purple: #bc8cff;
+      --radius: 8px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    header h1 { font-size: 18px; font-weight: 600; }
+    header .subtitle { color: var(--text-muted); font-size: 12px; }
+    .header-actions { margin-left: auto; display: flex; gap: 8px; }
+    button {
+      cursor: pointer;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #0d1117;
+      border-color: var(--accent);
+    }
+    .btn-primary:hover { opacity: 0.85; }
+    .btn-secondary { background: var(--surface2); color: var(--text); }
+    .btn-secondary:hover { border-color: var(--accent); }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      height: calc(100vh - 57px);
+    }
+
+    /* News sidebar */
+    .news-panel {
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      background: var(--surface);
+    }
+    .news-panel-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      position: sticky;
+      top: 0;
+      background: var(--surface);
+      z-index: 10;
+    }
+    .news-panel-header h2 { font-size: 14px; font-weight: 600; flex: 1; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-blue { background: rgba(88,166,255,0.15); color: var(--accent); }
+    .badge-green { background: rgba(63,185,80,0.15); color: var(--green); }
+    .badge-red { background: rgba(248,81,73,0.15); color: var(--red); }
+    .badge-yellow { background: rgba(210,153,34,0.15); color: var(--yellow); }
+    .badge-gray { background: var(--surface2); color: var(--text-muted); }
+
+    .news-item {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .news-item:hover { background: var(--surface2); }
+    .news-item.active { background: rgba(88,166,255,0.08); border-left: 3px solid var(--accent); }
+    .news-item.analyzed { border-left: 3px solid var(--green); }
+    .news-item.analyzing { border-left: 3px solid var(--yellow); opacity: 0.7; }
+    .news-source {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .news-title {
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.4;
+      margin-bottom: 4px;
+    }
+    .news-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    /* Main detail panel */
+    .detail-panel {
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-muted);
+      gap: 12px;
+      text-align: center;
+    }
+    .empty-state .icon { font-size: 48px; }
+    .empty-state h3 { font-size: 16px; color: var(--text); }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* News header in detail */
+    .detail-news-title {
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1.35;
+      margin-bottom: 8px;
+    }
+    .detail-meta {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      color: var(--text-muted);
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+    .detail-summary {
+      color: var(--text-muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    /* Stock impact grid */
+    .stock-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .stock-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+    }
+    .stock-card.positive { border-left: 3px solid var(--green); }
+    .stock-card.negative { border-left: 3px solid var(--red); }
+    .stock-card.neutral  { border-left: 3px solid var(--text-muted); }
+    .stock-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .ticker {
+      font-size: 15px;
+      font-weight: 700;
+      font-family: monospace;
+      color: var(--accent);
+    }
+    .company-name { font-size: 12px; color: var(--text-muted); }
+    .impact-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 8px;
+    }
+    .direction-badge { font-size: 12px; font-weight: 600; }
+    .direction-badge.positive { color: var(--green); }
+    .direction-badge.negative { color: var(--red); }
+    .direction-badge.neutral  { color: var(--text-muted); }
+    .magnitude-bar {
+      height: 4px;
+      border-radius: 2px;
+      background: var(--border);
+      margin-top: 8px;
+      overflow: hidden;
+    }
+    .magnitude-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.6s ease;
+    }
+    .positive .magnitude-fill { background: var(--green); }
+    .negative .magnitude-fill { background: var(--red); }
+    .neutral .magnitude-fill  { background: var(--text-muted); }
+    .stock-reason { font-size: 11px; color: var(--text-muted); margin-top: 8px; line-height: 1.4; }
+
+    /* Monte Carlo */
+    .mc-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .mc-stat {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      text-align: center;
+    }
+    .mc-stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .mc-stat-label { font-size: 11px; color: var(--text-muted); }
+    .mc-meta {
+      display: flex;
+      gap: 16px;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .mc-meta span { display: flex; align-items: center; gap: 4px; }
+    canvas { max-height: 200px; }
+
+    /* Loading */
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      color: var(--text-muted);
+      gap: 10px;
+    }
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-msg {
+      background: rgba(248,81,73,0.1);
+      border: 1px solid rgba(248,81,73,0.3);
+      border-radius: var(--radius);
+      padding: 14px;
+      color: var(--red);
+      font-size: 13px;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .no-stocks {
+      color: var(--text-muted);
+      font-size: 13px;
+      padding: 12px;
+      background: var(--surface2);
+      border-radius: var(--radius);
+    }
+
+    /* Severity meter */
+    .severity-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .severity-track {
+      flex: 1;
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .severity-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, var(--green), var(--yellow), var(--red));
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>📈 News Stock Impact Analyzer</h1>
+    <div class="subtitle">Global news · Stock exposure · Monte Carlo continuation probability</div>
+  </div>
+  <div class="header-actions">
+    <button class="btn-secondary" onclick="loadNews(true)">⟳ Refresh News</button>
+    <button class="btn-primary" id="analyzeAllBtn" onclick="analyzeAll()">⚡ Analyze Top 5</button>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- News list -->
+  <div class="news-panel">
+    <div class="news-panel-header">
+      <h2>Global News</h2>
+      <span class="badge badge-blue" id="newsCount">0 articles</span>
+    </div>
+    <div id="newsList">
+      <div class="loading"><div class="spinner"></div> Fetching news…</div>
+    </div>
+  </div>
+
+  <!-- Detail -->
+  <div class="detail-panel" id="detailPanel">
+    <div class="empty-state">
+      <div class="icon">🌍</div>
+      <h3>Select a news article</h3>
+      <p>Click any article on the left to analyze its stock market impact<br>and view Monte Carlo continuation probability.</p>
+      <br>
+      <button class="btn-primary" onclick="analyzeAll()">⚡ Auto-analyze Top 5 Articles</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─────────────── State ───────────────
+const state = {
+  news: [],
+  analyzed: {},
+  analyzing: new Set(),
+  activeId: null,
+  chart: null,
+};
+
+// ─────────────── Startup ───────────────
+window.addEventListener("DOMContentLoaded", () => loadNews(false));
+
+// ─────────────── News Loading ───────────────
+async function loadNews(refresh = false) {
+  document.getElementById("newsList").innerHTML =
+    '<div class="loading"><div class="spinner"></div> Fetching news…</div>';
+
+  try {
+    const resp = await fetch(`/api/news?refresh=${refresh}`);
+    const data = await resp.json();
+    state.news = data.items;
+    renderNewsList();
+    document.getElementById("newsCount").textContent = `${data.count} articles`;
+  } catch (e) {
+    document.getElementById("newsList").innerHTML =
+      `<div class="error-msg" style="margin:16px">Failed to load news: ${e.message}</div>`;
+  }
+}
+
+function renderNewsList() {
+  const list = document.getElementById("newsList");
+  if (!state.news.length) {
+    list.innerHTML = '<div class="loading">No articles found.</div>';
+    return;
+  }
+
+  list.innerHTML = state.news.map(item => {
+    const isAnalyzed = !!state.analyzed[item.id];
+    const isAnalyzing = state.analyzing.has(item.id);
+    const isActive = state.activeId === item.id;
+    let cls = "news-item";
+    if (isActive) cls += " active";
+    if (isAnalyzed) cls += " analyzed";
+    if (isAnalyzing) cls += " analyzing";
+
+    return `
+      <div class="${cls}" id="ni_${item.id}" onclick="selectItem('${item.id}')">
+        <div class="news-source">${escHtml(item.source)}</div>
+        <div class="news-title">${escHtml(item.title)}</div>
+        <div class="news-desc">${escHtml(item.description || "")}</div>
+      </div>`;
+  }).join("");
+}
+
+// ─────────────── Item Selection ───────────────
+async function selectItem(id) {
+  state.activeId = id;
+  renderNewsList();
+
+  if (state.analyzed[id]) {
+    renderDetail(state.analyzed[id]);
+    return;
+  }
+  renderDetailLoading(id);
+  await analyzeItem(id);
+}
+
+async function analyzeItem(id) {
+  if (state.analyzing.has(id)) return;
+  state.analyzing.add(id);
+  renderNewsList();
+
+  try {
+    const resp = await fetch(`/api/analyze/${id}`);
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || resp.statusText);
+    }
+    const data = await resp.json();
+    state.analyzed[id] = data;
+    if (state.activeId === id) renderDetail(data);
+  } catch (e) {
+    if (state.activeId === id) renderDetailError(e.message);
+  } finally {
+    state.analyzing.delete(id);
+    renderNewsList();
+  }
+}
+
+async function analyzeAll() {
+  const btn = document.getElementById("analyzeAllBtn");
+  btn.disabled = true;
+  btn.textContent = "⏳ Analyzing…";
+  try {
+    const resp = await fetch("/api/analyze-batch?limit=5");
+    const data = await resp.json();
+    for (const r of data.results) {
+      if (!r.error) state.analyzed[r.item_id] = r;
+    }
+    renderNewsList();
+    // Show first result
+    const first = data.results.find(r => !r.error);
+    if (first) { state.activeId = first.item_id; renderDetail(first); renderNewsList(); }
+  } catch (e) {
+    alert("Batch analysis failed: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "⚡ Analyze Top 5";
+  }
+}
+
+// ─────────────── Detail Rendering ───────────────
+function renderDetailLoading(id) {
+  const item = state.news.find(n => n.id === id);
+  document.getElementById("detailPanel").innerHTML = `
+    <div class="card">
+      <div class="detail-news-title">${escHtml(item?.title || "")}</div>
+      <div class="loading"><div class="spinner"></div> Claude is analyzing…</div>
+    </div>`;
+}
+
+function renderDetailError(msg) {
+  document.getElementById("detailPanel").innerHTML = `
+    <div class="error-msg">
+      <strong>Analysis failed:</strong> ${escHtml(msg)}<br>
+      Make sure ANTHROPIC_API_KEY is set in your environment.
+    </div>`;
+}
+
+function renderDetail(data) {
+  const { news, analysis, monte_carlo: mc } = data;
+  const panel = document.getElementById("detailPanel");
+
+  const categoryLabel = mc.category.replace("_", " ");
+  const severityPct = (mc.severity / 10) * 100;
+
+  // Stock cards
+  let stocksHtml;
+  if (!analysis.stocks.length) {
+    stocksHtml = `<div class="no-stocks">No publicly-traded companies directly impacted by this event.</div>`;
+  } else {
+    stocksHtml = `<div class="stock-grid">` +
+      analysis.stocks.map(s => {
+        const dir = s.direction;
+        const arrow = dir === "positive" ? "▲" : dir === "negative" ? "▼" : "◆";
+        const pct = (s.magnitude / 10) * 100;
+        return `
+          <div class="stock-card ${dir}">
+            <div class="stock-header">
+              <span class="ticker">${escHtml(s.ticker)}</span>
+              <span class="badge badge-${dir === "positive" ? "green" : dir === "negative" ? "red" : "gray"}">
+                ${arrow} ${dir}
+              </span>
+            </div>
+            <div class="company-name">${escHtml(s.company)}</div>
+            <div class="magnitude-bar">
+              <div class="magnitude-fill" style="width:${pct}%"></div>
+            </div>
+            <div class="impact-row">
+              <span class="direction-badge ${dir}">Impact ${s.magnitude}/10</span>
+            </div>
+            <div class="stock-reason">${escHtml(s.reason)}</div>
+          </div>`;
+      }).join("") + `</div>`;
+  }
+
+  // Monte Carlo stats
+  const p7 = mc.probability_7d;
+  const p14 = mc.probability_14d;
+  const p30 = mc.probability_30d;
+
+  panel.innerHTML = `
+    <!-- News Header -->
+    <div class="card">
+      <div class="detail-meta">
+        <span class="badge badge-blue">${escHtml(news.source)}</span>
+        ${news.published ? `<span>${escHtml(news.published.slice(0,25))}</span>` : ""}
+        <a href="${escHtml(news.url)}" target="_blank" rel="noopener">Read original ↗</a>
+      </div>
+      <div class="detail-news-title">${escHtml(news.title)}</div>
+      <div class="detail-summary">${escHtml(analysis.summary)}</div>
+    </div>
+
+    <!-- Stock Impact -->
+    <div class="card">
+      <div class="card-title">
+        📊 Impacted Stocks
+        <span class="badge badge-blue">${analysis.stocks.length} companies</span>
+      </div>
+      ${stocksHtml}
+    </div>
+
+    <!-- Monte Carlo -->
+    <div class="card">
+      <div class="card-title">🎲 Monte Carlo Continuation Probability</div>
+
+      <div class="mc-stats">
+        <div class="mc-stat">
+          <div class="mc-stat-value" style="color:${probColor(p7)}">${p7}%</div>
+          <div class="mc-stat-label">7-day probability</div>
+        </div>
+        <div class="mc-stat">
+          <div class="mc-stat-value" style="color:${probColor(p14)}">${p14}%</div>
+          <div class="mc-stat-label">14-day probability</div>
+        </div>
+        <div class="mc-stat">
+          <div class="mc-stat-value" style="color:${probColor(p30)}">${p30}%</div>
+          <div class="mc-stat-label">30-day probability</div>
+        </div>
+      </div>
+
+      <canvas id="mcChart"></canvas>
+
+      <div class="mc-meta">
+        <span>📁 Category: <strong>${categoryLabel}</strong></span>
+        <span>⚠️ Severity:
+          <div class="severity-row" style="display:inline-flex;align-items:center;gap:6px;">
+            <div class="severity-track" style="width:80px">
+              <div class="severity-fill" style="width:${severityPct}%"></div>
+            </div>
+            <strong>${mc.severity}/10</strong>
+          </div>
+        </span>
+        <span>⏱ Expected duration: <strong>~${mc.expected_duration_days} days</strong></span>
+        <span>🔁 Simulations: <strong>${mc.simulations.toLocaleString()}</strong></span>
+      </div>
+    </div>`;
+
+  // Render chart
+  renderMcChart(mc.daily_probs);
+}
+
+function renderMcChart(dailyProbs) {
+  if (state.chart) { state.chart.destroy(); state.chart = null; }
+  const ctx = document.getElementById("mcChart");
+  if (!ctx) return;
+
+  const labels = dailyProbs.map((_, i) => `Day ${i + 1}`);
+  const colors = dailyProbs.map(p => p > 60 ? "#f85149" : p > 30 ? "#d29922" : "#3fb950");
+
+  state.chart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        label: "P(event active) %",
+        data: dailyProbs,
+        borderColor: "#58a6ff",
+        backgroundColor: "rgba(88,166,255,0.1)",
+        fill: true,
+        tension: 0.35,
+        pointRadius: 0,
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.parsed.y.toFixed(1)}% probability active`,
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: "#21262d" },
+          ticks: { color: "#8b949e", maxTicksLimit: 10 },
+        },
+        y: {
+          min: 0, max: 100,
+          grid: { color: "#21262d" },
+          ticks: {
+            color: "#8b949e",
+            callback: v => v + "%",
+          },
+        }
+      }
+    }
+  });
+}
+
+// ─────────────── Helpers ───────────────
+function probColor(p) {
+  if (p > 60) return "var(--red)";
+  if (p > 30) return "var(--yellow)";
+  return "var(--green)";
+}
+
+function escHtml(str) {
+  if (!str) return "";
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+</script>
+</body>
+</html>
